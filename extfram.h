@@ -22,11 +22,36 @@
 //                |                 |
 //                |             P5.3|-> Slave Chip Select (GPIO)
 
+
+//                   MSP432P401R (100 pin, using UCB1)
+//                 -----------------
+//                |             P1.0|-> Comms LED
+//                |                 |
+//                |                 |
+//                |                 |
+//                |             P6.4|-> Data Out (UCB1SIMO <-> SDI)
+//                |                 |
+//                |             P6.5|<- Data In (UCB1SOMI <-> SDO)
+//                |                 |
+//                |             P6.3|-> Serial Clock Out (UCB1CLK <-> SCK)
+//                |                 |
+//                |             P1.5|-> Slave Chip Select (GPIO <-> CS)
+
+
 #ifndef JAPARILIB_EXTFRAM_H_
 #define JAPARILIB_EXTFRAM_H_
 
+#ifdef __MSP430__
+#include <msp430.h>
+#else
+#include <msp.h>
+#endif
+
 #define FRAM_8MB
+#ifdef __MSP430__
+// TODO: DMA on MSP432
 #define EXTFRAM_USE_DMA
+#endif
 #define UCA3
 
 #ifdef UCA3
@@ -59,9 +84,15 @@
 
 #include <stdint.h>
 
+#ifdef __MSP430__
 #define SLAVE_CS_OUT    P5OUT
 #define SLAVE_CS_DIR    P5DIR
 #define SLAVE_CS_PIN    BIT3
+#else
+#define SLAVE_CS_OUT    P1OUT
+#define SLAVE_CS_DIR    P1DIR
+#define SLAVE_CS_PIN    BIT5
+#endif
 
 
 #define COMMS_LED_OUT   P1OUT
@@ -137,8 +168,20 @@ void eraseFRAM(){
 void initSPI()
 {
 
+#ifdef __MSP430__
     SPISEL0 |= 0x07;
     SPISEL1 &= 0xF8;
+#else
+#ifdef UCA3
+    // XXX: Not tested yet
+    P9SEL0 |= BIT5 | BIT6 | BIT7;
+    P9SEL1 &= ~(BIT5 | BIT6 | BIT7);
+#endif
+#ifdef UCB1
+    P6SEL0 |= BIT3 | BIT4 | BIT5;
+    P6SEL1 &= ~(BIT3 | BIT4 | BIT5);
+#endif
+#endif
     SLAVE_CS_DIR |= SLAVE_CS_PIN;
     SLAVE_CS_OUT |= SLAVE_CS_PIN;
 
