@@ -443,7 +443,7 @@ void SPI_FILL_Q15(SPI_ADDR* A, int16_t val, unsigned long len ){
 			MAP_DMA_assignInterrupt(DMA_INT1, MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM);
 			MAP_Interrupt_enableInterrupt(INT_DMA_INT1);
 			MAP_Interrupt_disableSleepOnIsrExit(); // XXX keep this?
-			for (uint16_t idx = 0; idx < len; idx += 1024) {
+			for (uint32_t idx = 0; idx < len; idx += 1024) {
 				MAP_DMA_setChannelTransfer(
 					MSP432_DMA_EUSCI_TRANSMIT_CHANNEL | UDMA_PRI_SELECT, UDMA_MODE_BASIC,
 					(void*) &val_low, (void*) MAP_SPI_getTransmitBufferAddressForDMA(MSP432_DMA_EUSCI_MODULE), MIN_VAL(1024, len - idx)
