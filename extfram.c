@@ -396,7 +396,6 @@ void SPI_WRITE(SPI_ADDR* A, const uint8_t *src, unsigned long len ){
 }
 
 void SPI_FILL_Q15(SPI_ADDR* A, int16_t val, unsigned long len ){
-	len = len * sizeof(int16_t);
 	uint8_t val_high = (((uint16_t)val) & 0xFF00) >> 8;
 	uint8_t val_low = ((uint16_t)val) & 0x00FF;
 	//All writes to the memory begin with a WREN opcode with CS being asserted and deasserted.
@@ -423,12 +422,15 @@ void SPI_FILL_Q15(SPI_ADDR* A, int16_t val, unsigned long len ){
 			DMA3CTL = DMADT_0 + DMADSTINCR_0 + DMASRCINCR_0 +  DMADSTBYTE__BYTE  + DMASRCBYTE__BYTE + DMALEVEL__EDGE;
 			DMA3SA = &val_low;
 			DMA3DA = &SPITXBUF;
-			DMA3SZ = len;
-			DMA3CTL |= DMAEN__ENABLE;
-			//Triger the DMA to invoke the first transfer
-			SPIIFG &= ~UCTXIFG;
-			SPIIFG |=  UCTXIFG;
-			while(DMA3CTL & DMAEN__ENABLE);
+			// DMAxSZ can only represent 0~65535
+			for (uint32_t idx = 0; idx < len; idx += 65534) {
+				DMA3SZ = MIN_VAL(65534, len - idx);
+				DMA3CTL |= DMAEN__ENABLE;
+				//Triger the DMA to invoke the first transfer
+				SPIIFG &= ~UCTXIFG;
+				SPIIFG |=  UCTXIFG;
+				while(DMA3CTL & DMAEN__ENABLE);
+			}
 #else
 			// Ref: dma_eusci_spi.c from https://e2e.ti.com/support/microcontrollers/msp430/f/166/t/453110?MSP432-SPI-with-DMA
 			MAP_DMA_enableModule();
@@ -438,7 +440,7 @@ void SPI_FILL_Q15(SPI_ADDR* A, int16_t val, unsigned long len ){
 				UDMA_ATTR_ALTSELECT | UDMA_ATTR_USEBURST | UDMA_ATTR_HIGH_PRIORITY | UDMA_ATTR_REQMASK);
 			MAP_DMA_setChannelControl(
 				MSP432_DMA_EUSCI_TRANSMIT_CHANNEL | UDMA_PRI_SELECT,
-				UDMA_ARB_1024 | UDMA_SIZE_8 | UDMA_SRC_INC_NONE | UDMA_DST_INC_NONE
+				UDMA_ARB_1 | UDMA_SIZE_8 | UDMA_SRC_INC_NONE | UDMA_DST_INC_NONE
 			);
 			MAP_DMA_assignInterrupt(DMA_INT1, MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM);
 			MAP_Interrupt_enableInterrupt(INT_DMA_INT1);
