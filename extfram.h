@@ -6,6 +6,8 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+	
+#define EXTFRAM_USE_DMA
 
 extern uint8_t controlTable[1024] __attribute__((aligned (1024)));
 extern uint32_t curDMATransmitChannelNum, curDMAReceiveChannelNum;

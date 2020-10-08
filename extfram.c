@@ -51,8 +51,8 @@ uint32_t curDMATransmitChannelNum, curDMAReceiveChannelNum;
 
 #include <string.h>
 
-#define FRAM_8MB
-#define EXTFRAM_USE_DMA
+
+
 #ifdef __MSP430__
 #define UCA3
 #else
@@ -98,8 +98,8 @@ uint32_t curDMATransmitChannelNum, curDMAReceiveChannelNum;
 #include <stdint.h>
 
 #ifdef __MSP430__
-#define SLAVE_CS_OUT    P5OUT
-#define SLAVE_CS_DIR    P5DIR
+#define SLAVE_CS_OUT    P6OUT
+#define SLAVE_CS_DIR    P6DIR
 #define SLAVE_CS_PIN    BIT3
 #else
 #define SLAVE_CS_OUT    P1OUT
@@ -147,7 +147,7 @@ uint32_t curDMATransmitChannelNum, curDMAReceiveChannelNum;
 
 void eraseFRAM(){
 	uint8_t val;
-#ifdef FRAM_8MB
+#ifdef FRAM_8Mb
 	unsigned long cnt = 0xfffff;
 #else
 	unsigned long cnt = 0x7ffff;
@@ -198,12 +198,12 @@ void initSPI()
     //Clock Polarity: The inactive state is high
     //MSB First, 8-bit, Master, 3-pin mode, Synchronous
     SPICTLW0 = UCSWRST;                       // **Put state machine in reset**
-    SPICTLW0 |= UCCKPL | UCMSB | UCSYNC
+    SPICTLW0 |= UCCKPH | UCMSB | UCSYNC
                        | UCMST | UCSSEL__SMCLK;      // 3-pin, 8-bit SPI Slave
 
     //FRAM SPEED control
 #ifdef __MSP430__
-    SPIBRW = 0;
+    SPIBRW = 4;
 #else
     // Somehow too fast SPI clocks result in incorrect values in SPI_READ with DMA
     SPIBRW = 2;
@@ -242,6 +242,7 @@ void SPI_READ(SPI_ADDR* A,uint8_t *dst, unsigned long len ){
 		while(SPISTATW & 0x1);
 #if defined(EXTFRAM_USE_DMA)
 #ifdef __MSP430__
+
 		DMACTL1 |= DMA3TSEL__SPITXIFG;
 		// Write dummy data to TX
 		DMA3CTL = DMADT_0 + DMADSTINCR_0 + DMASRCINCR_0 +  DMADSTBYTE__BYTE  + DMASRCBYTE__BYTE + DMALEVEL__EDGE;
@@ -259,10 +260,12 @@ void SPI_READ(SPI_ADDR* A,uint8_t *dst, unsigned long len ){
 		//Trigger TX DMA
 		SPIIFG &= ~UCTXIFG;
 		SPIIFG |=  UCTXIFG;
+//		while(SPISTATW & 0x1);
 		//Trigger RX DMA
-		SPIIFG &= ~UCRXIFG;
-		SPIIFG |=  UCRXIFG;
+//		SPIIFG &= ~UCRXIFG;
+//		SPIIFG |=  UCRXIFG;
 		while(DMA4CTL & DMAEN__ENABLE);
+		while(DMA3CTL & DMAEN__ENABLE);
 
 #else // !defined(__MSP430__)
 		MAP_DMA_enableModule();
@@ -325,7 +328,7 @@ void SPI_READ(SPI_ADDR* A,uint8_t *dst, unsigned long len ){
 			*dst++ = SPIRXBUF;
 		}
 #endif
-
+	while(SPISTATW & 0x1);
 	SLAVE_CS_OUT |= SLAVE_CS_PIN;
 }
 
@@ -348,6 +351,7 @@ void SPI_WRITE(SPI_ADDR* A, const uint8_t *src, unsigned long len ){
 
 #ifdef EXTFRAM_USE_DMA
 #ifdef __MSP430__
+
 		//Triggered when TX is done
 		DMACTL1 |= DMA3TSEL__SPITXIFG;
 		DMA3CTL = DMADT_0 + DMADSTINCR_0 + DMASRCINCR_3 +  DMADSTBYTE__BYTE  + DMASRCBYTE__BYTE + DMALEVEL__EDGE;
@@ -390,12 +394,14 @@ void SPI_WRITE(SPI_ADDR* A, const uint8_t *src, unsigned long len ){
 		}
 #endif
 		//clean overrun flag
+		while(SPISTATW & 0x1);
 		uint8_t val=SPIRXBUF;
 
 	SLAVE_CS_OUT |= SLAVE_CS_PIN;
 }
 
 void SPI_FILL_Q15(SPI_ADDR* A, int16_t val, unsigned long len ){
+	len = len * sizeof(int16_t);
 	uint8_t val_high = (((uint16_t)val) & 0xFF00) >> 8;
 	uint8_t val_low = ((uint16_t)val) & 0x00FF;
 	//All writes to the memory begin with a WREN opcode with CS being asserted and deasserted.
@@ -422,15 +428,12 @@ void SPI_FILL_Q15(SPI_ADDR* A, int16_t val, unsigned long len ){
 			DMA3CTL = DMADT_0 + DMADSTINCR_0 + DMASRCINCR_0 +  DMADSTBYTE__BYTE  + DMASRCBYTE__BYTE + DMALEVEL__EDGE;
 			DMA3SA = &val_low;
 			DMA3DA = &SPITXBUF;
-			// DMAxSZ can only represent 0~65535
-			for (uint32_t idx = 0; idx < len; idx += 65534) {
-				DMA3SZ = MIN_VAL(65534, len - idx);
-				DMA3CTL |= DMAEN__ENABLE;
-				//Triger the DMA to invoke the first transfer
-				SPIIFG &= ~UCTXIFG;
-				SPIIFG |=  UCTXIFG;
-				while(DMA3CTL & DMAEN__ENABLE);
-			}
+			DMA3SZ = len;
+			DMA3CTL |= DMAEN__ENABLE;
+			//Triger the DMA to invoke the first transfer
+			SPIIFG &= ~UCTXIFG;
+			SPIIFG |=  UCTXIFG;
+			while(DMA3CTL & DMAEN__ENABLE);
 #else
 			// Ref: dma_eusci_spi.c from https://e2e.ti.com/support/microcontrollers/msp430/f/166/t/453110?MSP432-SPI-with-DMA
 			MAP_DMA_enableModule();
@@ -440,7 +443,7 @@ void SPI_FILL_Q15(SPI_ADDR* A, int16_t val, unsigned long len ){
 				UDMA_ATTR_ALTSELECT | UDMA_ATTR_USEBURST | UDMA_ATTR_HIGH_PRIORITY | UDMA_ATTR_REQMASK);
 			MAP_DMA_setChannelControl(
 				MSP432_DMA_EUSCI_TRANSMIT_CHANNEL | UDMA_PRI_SELECT,
-				UDMA_ARB_1 | UDMA_SIZE_8 | UDMA_SRC_INC_NONE | UDMA_DST_INC_NONE
+				UDMA_ARB_1024 | UDMA_SIZE_8 | UDMA_SRC_INC_NONE | UDMA_DST_INC_NONE
 			);
 			MAP_DMA_assignInterrupt(DMA_INT1, MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM);
 			MAP_Interrupt_enableInterrupt(INT_DMA_INT1);
