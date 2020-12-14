@@ -22,7 +22,7 @@ void initSPI(void);
 void SPI_READ(SPI_ADDR* A,uint8_t *dst, unsigned long len );
 void SPI_WRITE(SPI_ADDR* A, const uint8_t *src, unsigned long len );
 void SPI_FILL_Q15(SPI_ADDR* A, int16_t val, unsigned long len );
-void testSPI (void);
+uint8_t testSPI(void);
 
 #ifdef __cplusplus
 }

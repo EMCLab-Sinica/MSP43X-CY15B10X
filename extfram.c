@@ -52,7 +52,6 @@ uint32_t curDMATransmitChannelNum, curDMAReceiveChannelNum;
 #include <string.h>
 
 
-
 #ifdef __MSP430__
 #define UCA3
 #else
@@ -500,7 +499,7 @@ void DMA_INT2_IRQHandler(void) {
 
 #define TEST_ARRAY_LEN 16
 
-void testSPI (void) {
+uint8_t testSPI(void) {
     SPI_ADDR A;
     uint8_t test_array[TEST_ARRAY_LEN];
     A.L = 0;
@@ -513,7 +512,8 @@ void testSPI (void) {
     SPI_READ( &A, test_array, TEST_ARRAY_LEN );
     for (uint8_t idx = 0; idx < TEST_ARRAY_LEN; idx++) {
         if (test_array[idx] != idx) {
-            while (1) {}
+            return 1;
         }
     }
+    return 0;
 }
