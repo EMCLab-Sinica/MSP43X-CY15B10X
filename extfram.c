@@ -23,17 +23,17 @@
 //                |             P5.3|-> Slave Chip Select (GPIO)
 
 
-//                   MSP432P401R (100 pin, using UCB1)
+//                   MSP432P401R (100 pin, using UCA1)
 //                 -----------------
 //                |             P1.0|-> Comms LED
 //                |                 |
 //                |                 |
 //                |                 |
-//                |             P6.4|-> Data Out (UCB1SIMO <-> SDI)
+//                |             P2.3|-> Data Out (UCA1SIMO <-> SDI)
 //                |                 |
-//                |             P6.5|<- Data In (UCB1SOMI <-> SDO)
+//                |             P2.2|<- Data In (UCA1SOMI <-> SDO)
 //                |                 |
-//                |             P6.3|-> Serial Clock Out (UCB1CLK <-> SCK)
+//                |             P2.1|-> Serial Clock Out (UCA1CLK <-> SCK)
 //                |                 |
 //                |             P1.5|-> Slave Chip Select (GPIO <-> CS)
 
@@ -55,7 +55,7 @@ uint32_t curDMATransmitChannelNum, curDMAReceiveChannelNum;
 #ifdef __MSP430__
 #define UCA3
 #else
-#define UCB1
+#define UCA1
 #endif
 
 #ifdef UCA3
@@ -89,6 +89,21 @@ uint32_t curDMATransmitChannelNum, curDMAReceiveChannelNum;
 #define MSP432_DMA_EUSCI_TRANSMIT_CHANNEL DMA_CH2_EUSCIB1TX0
 #define MSP432_DMA_EUSCI_RECEIVE_CHANNEL DMA_CH3_EUSCIB1RX0
 #define MSP432_DMA_EUSCI_MODULE EUSCI_B1_BASE
+#endif
+
+#ifdef UCA1
+#define DMA3TSEL__SPITXIFG DMA3TSEL__UCA1TXIFG
+#define SPITXBUF UCA1TXBUF
+#define SPIRXBUF UCA1RXBUF
+#define SPISTATW UCA1STATW
+#define SPICTLW0 UCA1CTLW0
+#define SPIIFG UCA1IFG
+#define SPIBRW UCA1BRW
+#define SPISEL0 P5SEL0
+#define SPISEL1 P5SEL1
+#define MSP432_DMA_EUSCI_TRANSMIT_CHANNEL DMA_CH2_EUSCIA1TX
+#define MSP432_DMA_EUSCI_RECEIVE_CHANNEL DMA_CH3_EUSCIA1RX
+#define MSP432_DMA_EUSCI_MODULE EUSCI_A1_BASE
 #endif
 
 #define MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM (MSP432_DMA_EUSCI_TRANSMIT_CHANNEL & 0x0F)
@@ -189,6 +204,10 @@ void initSPI()
 #ifdef UCB1
     P6SEL0 |= BIT3 | BIT4 | BIT5;
     P6SEL1 &= ~(BIT3 | BIT4 | BIT5);
+#endif
+#ifdef UCA1
+    P2SEL0 |= BIT1 | BIT2 | BIT3;
+    P2SEL1 &= ~(BIT1 | BIT2 | BIT3);
 #endif
 #endif
     SLAVE_CS_DIR |= SLAVE_CS_PIN;
@@ -318,6 +337,7 @@ void SPI_READ(SPI_ADDR* A,uint8_t *dst, unsigned long len ){
 		MAP_DMA_enableChannel(MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM);
 		MAP_DMA_enableChannel(MSP432_DMA_EUSCI_RECEIVE_CHANNEL_NUM);
 
+		while (MAP_DMA_isChannelEnabled(MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM)) {}
 		while (MAP_DMA_isChannelEnabled(MSP432_DMA_EUSCI_RECEIVE_CHANNEL_NUM)) {}
 #endif
 #else
