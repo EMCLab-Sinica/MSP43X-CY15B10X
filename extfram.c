@@ -224,7 +224,7 @@ void initSPI()
     SPIBRW = 4;
 #else
     // Somehow too fast SPI clocks result in incorrect values in SPI_READ with DMA
-    SPIBRW = 2;
+    SPIBRW = 4;
 #endif
 
     SPICTLW0 &= ~UCSWRST;                     // **Initialize USCI state machine**
