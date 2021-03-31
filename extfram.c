@@ -20,7 +20,7 @@
 //                |                 |
 //                |             P6.2|-> Serial Clock Out (UCA3	CLK)
 //                |                 |
-//                |             P5.3|-> Slave Chip Select (GPIO)
+//                |             P6.3|-> Slave Chip Select (GPIO)
 
 
 //                   MSP432P401R (100 pin, using UCA1)
