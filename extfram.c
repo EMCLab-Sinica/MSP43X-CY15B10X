@@ -39,11 +39,12 @@
 
 #include "extfram.h"
 
+#include <driverlib.h>
+
 #ifdef __MSP430__
 #include <msp430.h>
 #else
 #include <msp.h>
-#include <driverlib.h>
 #include <stdint.h>
 uint8_t controlTable[1024];
 uint32_t curDMATransmitChannelNum, curDMAReceiveChannelNum;
@@ -261,7 +262,7 @@ void SPI_READ(SPI_ADDR* A,uint8_t *dst, unsigned long len ){
 #if defined(EXTFRAM_USE_DMA)
 #ifdef __MSP430__
 
-		DMACTL1 |= DMA3TSEL__SPITXIFG;
+		DMACTL1 = (DMACTL1 & 0x00ff) | DMA3TSEL__SPITXIFG;
 		// Write dummy data to TX
 		DMA3CTL = DMADT_0 + DMADSTINCR_0 + DMASRCINCR_0 +  DMADSTBYTE__BYTE  + DMASRCBYTE__BYTE + DMALEVEL__EDGE;
 		DMA3SA = &SPIRXBUF;
@@ -352,6 +353,10 @@ void SPI_READ(SPI_ADDR* A,uint8_t *dst, unsigned long len ){
 }
 
 void SPI_WRITE(SPI_ADDR* A, const uint8_t *src, unsigned long len ){
+	SPI_WRITE2(A, src, len, 0);
+}
+
+void SPI_WRITE2(SPI_ADDR* A, const uint8_t *src, unsigned long len, uint16_t timer_delay) {
 	//All writes to the memory begin with a WREN opcode with CS being asserted and deasserted.
 	SLAVE_CS_OUT &= ~(SLAVE_CS_PIN);
 		SPITXBUF = CMD_WREN;
@@ -371,17 +376,33 @@ void SPI_WRITE(SPI_ADDR* A, const uint8_t *src, unsigned long len ){
 #ifdef EXTFRAM_USE_DMA
 #ifdef __MSP430__
 
-		//Triggered when TX is done
-		DMACTL1 |= DMA3TSEL__SPITXIFG;
+		if (!timer_delay) {
+			//Triggered when TX is done
+			DMACTL1 = (DMACTL1 & 0x00ff) | DMA3TSEL__SPITXIFG;
+		} else {
+			DMACTL1 = (DMACTL1 & 0x00ff) | DMA3TSEL__TA1CCR2;
+		}
 		DMA3CTL = DMADT_0 + DMADSTINCR_0 + DMASRCINCR_3 +  DMADSTBYTE__BYTE  + DMASRCBYTE__BYTE + DMALEVEL__EDGE;
 		DMA3SA = src;
 		DMA3DA = &SPITXBUF;
 		DMA3SZ = len;
 		DMA3CTL |= DMAEN__ENABLE;
-		//Triger the DMA to invoke the first transfer
-		SPIIFG &= ~UCTXIFG;
-		SPIIFG |=  UCTXIFG;
+		if (!timer_delay) {
+			//Triger the DMA to invoke the first transfer
+			SPIIFG &= ~UCTXIFG;
+			SPIIFG |=  UCTXIFG;
+		}
+		if (timer_delay) {
+			// Timer A0 is already used by FreeRTOS
+			TA1CCTL0 = TIMER_A_OUTPUTMODE_TOGGLE;
+			TA1CCR0 = timer_delay;
+			TA1CCR1 = 1; // a random number smaller than TA1CCR0; for generating PWM signals
+			TA1CTL = TIMER_A_CLOCKSOURCE_SMCLK + TIMER_A_CLOCKSOURCE_DIVIDER_1 + TIMER_A_UP_MODE;
+		}
 		while(DMA3CTL & DMAEN__ENABLE);
+		if (timer_delay) {
+			TA1CTL = TIMER_A_STOP_MODE + TIMER_A_DO_CLEAR;
+		}
 #else
 		// Ref: dma_eusci_spi.c from https://e2e.ti.com/support/microcontrollers/msp430/f/166/t/453110?MSP432-SPI-with-DMA
 		MAP_DMA_enableModule();
@@ -443,7 +464,7 @@ void SPI_FILL_Q15(SPI_ADDR* A, int16_t val, unsigned long len ){
                 if (val_high == val_low) {
 #ifdef __MSP430__
 			//Triggered when TX is done
-			DMACTL1 |= DMA3TSEL__SPITXIFG;
+			DMACTL1 = (DMACTL1 & 0x00ff) | DMA3TSEL__SPITXIFG;
 			DMA3CTL = DMADT_0 + DMADSTINCR_0 + DMASRCINCR_0 +  DMADSTBYTE__BYTE  + DMASRCBYTE__BYTE + DMALEVEL__EDGE;
 			DMA3SA = &val_low;
 			DMA3DA = &SPITXBUF;
