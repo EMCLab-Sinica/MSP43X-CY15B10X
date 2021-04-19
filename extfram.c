@@ -48,6 +48,7 @@
 #include <stdint.h>
 uint8_t controlTable[1024];
 uint32_t curDMATransmitChannelNum, curDMAReceiveChannelNum;
+static uint16_t msp432_dma_timer_delay;
 #endif
 
 #include <string.h>
@@ -407,24 +408,41 @@ void SPI_WRITE2(SPI_ADDR* A, const uint8_t *src, unsigned long len, uint16_t tim
 		// Ref: dma_eusci_spi.c from https://e2e.ti.com/support/microcontrollers/msp430/f/166/t/453110?MSP432-SPI-with-DMA
 		MAP_DMA_enableModule();
 		MAP_DMA_setControlBase(controlTable);
-		MAP_DMA_assignChannel(MSP432_DMA_EUSCI_TRANSMIT_CHANNEL);
-		MAP_DMA_disableChannelAttribute(MSP432_DMA_EUSCI_TRANSMIT_CHANNEL,
+		msp432_dma_timer_delay = timer_delay;
+		uint32_t dma_mapping, dma_channel;
+		if (!timer_delay) {
+			dma_mapping = MSP432_DMA_EUSCI_TRANSMIT_CHANNEL;
+			dma_channel = MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM;
+		} else {
+			dma_mapping = DMA_CH3_TIMERA1CCR2;
+			dma_channel = 3;
+		}
+		MAP_DMA_assignChannel(dma_mapping);
+		MAP_DMA_disableChannelAttribute(dma_mapping,
 			UDMA_ATTR_ALTSELECT | UDMA_ATTR_USEBURST | UDMA_ATTR_HIGH_PRIORITY | UDMA_ATTR_REQMASK);
 		MAP_DMA_setChannelControl(
-			MSP432_DMA_EUSCI_TRANSMIT_CHANNEL | UDMA_PRI_SELECT,
+			dma_mapping | UDMA_PRI_SELECT,
 			UDMA_ARB_1 | UDMA_SIZE_8 | UDMA_SRC_INC_8 | UDMA_DST_INC_NONE
 		);
-		MAP_DMA_assignInterrupt(DMA_INT1, MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM);
+		MAP_DMA_assignInterrupt(DMA_INT1, dma_channel);
 		MAP_Interrupt_enableInterrupt(INT_DMA_INT1);
 		MAP_Interrupt_disableSleepOnIsrExit(); // XXX keep this?
 		MAP_DMA_setChannelTransfer(
-			MSP432_DMA_EUSCI_TRANSMIT_CHANNEL | UDMA_PRI_SELECT, UDMA_MODE_BASIC,
+			dma_mapping | UDMA_PRI_SELECT, UDMA_MODE_BASIC,
 			(void*) src, (void*) MAP_SPI_getTransmitBufferAddressForDMA(MSP432_DMA_EUSCI_MODULE), len
 		);
-		curDMATransmitChannelNum = MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM;
-		curDMAReceiveChannelNum = MSP432_DMA_EUSCI_RECEIVE_CHANNEL_NUM;
-		MAP_DMA_enableChannel(MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM);
-		while (MAP_DMA_isChannelEnabled(MSP432_DMA_EUSCI_TRANSMIT_CHANNEL_NUM)) {}
+		curDMATransmitChannelNum = dma_channel;
+		curDMAReceiveChannelNum = 0;
+		MAP_DMA_enableChannel(dma_channel);
+		if (timer_delay) {
+			TA1CCTL0 = TIMER_A_OUTPUTMODE_TOGGLE;
+			TA1CCR0 = timer_delay;
+			TA1CCR1 = 1;
+			TA1CTL = TIMER_A_CLOCKSOURCE_SMCLK + TIMER_A_CLOCKSOURCE_DIVIDER_1 + TIMER_A_UP_MODE;
+		}
+		if (!timer_delay) {
+			while (MAP_DMA_isChannelEnabled(dma_channel)) {}
+		}
 #endif
 #endif
 #ifndef EXTFRAM_USE_DMA
@@ -437,7 +455,16 @@ void SPI_WRITE2(SPI_ADDR* A, const uint8_t *src, unsigned long len, uint16_t tim
 		while(SPISTATW & 0x1);
 		uint8_t val=SPIRXBUF;
 
-	SLAVE_CS_OUT |= SLAVE_CS_PIN;
+	uint8_t do_shutdown = 1;
+#if defined(EXTFRAM_USE_DMA) && defined(__MSP432__)
+	// Don't shut down external FRAM for asynchronous DMA on MSP432
+	if (timer_delay) {
+		do_shutdown = 0;
+	}
+#endif
+	if (do_shutdown) {
+		SLAVE_CS_OUT |= SLAVE_CS_PIN;
+	}
 }
 
 void SPI_FILL_Q15(SPI_ADDR* A, int16_t val, unsigned long len ){
@@ -525,6 +552,11 @@ void DMA_INT1_IRQHandler(void) {
     MAP_DMA_disableInterrupt(DMA_INT1);
     MAP_Interrupt_disableInterrupt(DMA_INT1);
     MAP_DMA_disableChannel(curDMATransmitChannelNum);
+    if (msp432_dma_timer_delay) {
+        SLAVE_CS_OUT |= SLAVE_CS_PIN;
+        TA1CTL = TIMER_A_STOP_MODE + TIMER_A_DO_CLEAR;
+        msp432_dma_timer_delay = 0;
+    }
 }
 
 void DMA_INT2_IRQHandler(void) {
