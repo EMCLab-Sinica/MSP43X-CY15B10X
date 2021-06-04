@@ -16,7 +16,7 @@
 //                |                 |
 //                |             P6.0|-> Data Out (UCA3SIMO)
 //                |                 |
-//                |             P6.1|<- Data In (UCSOA3MI)
+//                |             P6.1|<- Data In (UCA3SOMI)
 //                |                 |
 //                |             P6.2|-> Serial Clock Out (UCA3	CLK)
 //                |                 |
